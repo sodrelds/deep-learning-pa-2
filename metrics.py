@@ -118,6 +118,17 @@ def ap50(gt, det, limiar=0.5):
     return float(np.sum(np.diff(np.concatenate([[0], rec])) * prec))
 
 
+def map50_quadros(gt, det, limiar=0.5):
+    """Media do AP50 dos quadros com ao menos um pedestre verdadeiro.
+
+    Quadros sem pedestre ficam fora da media: AP nao tem recall definido neles. Deteccoes
+    nesses quadros continuam sendo falsos positivos no AP50 agregado da sequencia.
+    """
+    gq, dq = por_quadro(gt), por_quadro(det) if len(det) else {}
+    vazio = np.zeros((0, det.shape[1] if det.ndim == 2 else 7))
+    return float(np.mean([ap50(g, dq.get(f, vazio), limiar) for f, g in gq.items()])) if gq else 0.0
+
+
 def idf1(gt, pr, limiar=0.5):
     """Devolve IDF1 e IDTP."""
     if len(pr) == 0:
@@ -260,6 +271,11 @@ if __name__ == "__main__":
     assert abs(ap50(gt, det[det[:, 2] < 400]) - 0.5) < 1e-9
     fp = np.array([[1, -1, 900, 900, 50, 100, 2.0]])
     assert abs(ap50(gt, np.vstack([fp, det])) - 200 / 201) < 1e-9
+    # AP por quadro da media peso igual a cada quadro, nao a cada pessoa.
+    g = np.vstack([trilha(1, 0, [1]), trilha(2, 300, [1]), trilha(3, 0, [2])])
+    d = np.column_stack([g[:, 0], -np.ones(len(g)), g[:, 2:6], np.ones(len(g))])[:1]
+    assert abs(map50_quadros(g, d) - 0.25) < 1e-9
+    assert abs(ap50(g, d) - 1 / 3) < 1e-9
 
     # NMS: a segunda caixa tem IoU 0.81 com a primeira e cai, a terceira esta longe e fica
     cx = np.array([[0, 0, 10, 10], [1, 1, 9, 9], [50, 50, 10, 10]], float)

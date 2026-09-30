@@ -108,16 +108,30 @@ def janelas(trajs, L, rng):
     return torch.tensor(np.array(X), dtype=torch.float32), torch.tensor(np.array(M), dtype=torch.float32)
 
 
-def perda_janelas(modelo, X, M, T, gen, treino=True):
-    """Roda o modelo nas janelas com BPTT truncado em T. Se treino, ja faz o backward de cada
-    pedaco. Devolve a perda media por passo."""
+def perda_janelas(modelo, X, M, T, gen, treino=True, regime="teacher", prob_livre=0.0, visto=10):
+    """BPTT truncado. Apos `visto` passos, escolhe observacao ou previsao livre.
+
+    teacher: recebe observacao ruidosa em todos os passos; scheduled: a observacao de cada
+    passo e omitida com probabilidade crescente; free: so recebe as primeiras `visto`
+    observacoes. Na omissao, z=0 e a caixa prevista segue a saida anterior da rede.
+    A caixa prevista sempre e realimentada, como na inferencia.
+    """
+    if regime not in ("teacher", "scheduled", "free"):
+        raise ValueError(f"regime desconhecido: {regime}")
     obs = poe_ruido(X, gen)
     p = obs[:, 0]   # no nascimento a previsao e a propria deteccao
     s, total, L = None, 0.0, X.shape[1] - 1
     for t0 in range(0, L, T):
         perda = 0.0
         for t in range(t0, min(t0 + T, L)):
-            d, s = modelo(deslocamento(p, obs[:, t]), s)
+            if regime == "teacher" or t < visto:
+                usar = torch.ones(len(X), dtype=torch.bool)
+            elif regime == "free":
+                usar = torch.zeros(len(X), dtype=torch.bool)
+            else:
+                usar = torch.rand(len(X), generator=gen) >= prob_livre
+            z = deslocamento(p, obs[:, t]) * usar[:, None]
+            d, s = modelo(z, s)
             perda = perda + (F.smooth_l1_loss(d, deslocamento(p, X[:, t + 1]), reduction="none").sum(1) * M[:, t]).sum()
             p = desloca(p, d.detach())
         if treino:
@@ -128,7 +142,8 @@ def perda_janelas(modelo, X, M, T, gen, treino=True):
 
 
 def treina(celula="gru", oculto=64, T=16, L=64, epocas=60, lote=128, lr=1e-3, clip=1.0, seed=0,
-           trajs_treino=None, trajs_val=None, log=print):
+           trajs_treino=None, trajs_val=None, log=print, regime="teacher", validacao_regime="teacher",
+           visto=10):
     """Treina e devolve (modelo com a melhor perda na validacao, historico)."""
     torch.manual_seed(seed)
     rng, gen = np.random.default_rng(seed), torch.Generator().manual_seed(seed)
@@ -142,21 +157,28 @@ def treina(celula="gru", oculto=64, T=16, L=64, epocas=60, lote=128, lr=1e-3, cl
         X, M = janelas(trajs_treino, L, rng)
         perm = torch.randperm(len(X), generator=gen)
         modelo.train()
-        tr = []
+        tr, normas = [], []
+        prob_livre = ep / max(epocas - 1, 1) if regime == "scheduled" else 0.0
         for b in range(0, len(X), lote):
             i = perm[b:b + lote]
             opt.zero_grad()
-            tr.append(perda_janelas(modelo, X[i], M[i], T, gen))
+            tr.append(perda_janelas(modelo, X[i], M[i], T, gen, regime=regime,
+                                    prob_livre=prob_livre, visto=visto))
             if clip:
-                nn.utils.clip_grad_norm_(modelo.parameters(), clip)
+                norma = nn.utils.clip_grad_norm_(modelo.parameters(), clip)
+            else:
+                norma = torch.linalg.vector_norm(torch.stack([p.grad.norm() for p in modelo.parameters()
+                                                               if p.grad is not None]))
+            normas.append(float(norma))
             opt.step()
         modelo.eval()
         with torch.no_grad():
-            v = perda_janelas(modelo, *val, T, torch.Generator().manual_seed(123), treino=False)
-        hist.append((float(np.mean(tr)), v))
+            v = perda_janelas(modelo, *val, T, torch.Generator().manual_seed(123), treino=False,
+                              regime=validacao_regime, visto=visto)
+        hist.append((float(np.mean(tr)), v, float(np.mean(normas))))
         if v < melhor:
             melhor, estado = v, {k: x.clone() for k, x in modelo.state_dict().items()}
-        log(f"epoca {ep + 1:3d}  treino {hist[-1][0]:.4f}  val {v:.4f}")
+        log(f"epoca {ep + 1:3d}  treino {hist[-1][0]:.4f}  val {v:.4f}  norma_grad {hist[-1][2]:.3f}")
     modelo.load_state_dict(estado)
     return modelo.eval(), hist
 
@@ -224,6 +246,17 @@ if __name__ == "__main__":
     c = torch.tensor([[10.0, 20.0, 30.0, 60.0]])
     c2 = torch.tensor([[13.0, 18.0, 33.0, 57.0]])
     assert torch.allclose(desloca(c, deslocamento(c, c2)), c2, atol=1e-4)
+
+    # Nos extremos do schedule, as mascaras devem reproduzir teacher e free.
+    x = torch.stack([torch.stack([c[0] + torch.tensor([float(t), 0, 0, 0])
+                                  for t in range(9)]) for _ in range(2)])
+    mascara = torch.ones(2, 8)
+    pequena = Movimento()
+    def perda(regime, prob_livre=0.0):
+        return perda_janelas(pequena, x, mascara, 4, torch.Generator().manual_seed(42),
+                             treino=False, regime=regime, prob_livre=prob_livre, visto=3)
+    assert np.isclose(perda("teacher"), perda("scheduled", 0.0))
+    assert np.isclose(perda("free"), perda("scheduled", 1.0))
 
     trajs = []
     for seed in range(60):

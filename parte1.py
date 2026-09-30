@@ -1,14 +1,16 @@
 """Parte 1: baseline por quadro no MOT17.
 
 Duas fontes de deteccao, nenhuma treinada por nos:
-  SDP  deteccao publica que vem no MOT17. Dos tres detectores publicos e o de maior AP nas 7
-       sequencias (AP50 medio: DPM 0.42, FRCNN 0.54, SDP 0.65), por isso e a fonte padrao do
+  SDP  deteccao publica que vem no MOT17. Dos tres detectores publicos e o de maior mAP50 por
+       quadro nas 7 sequencias, por isso e a fonte padrao do
        resto do PA. Com deteccao boa, o que quebra e a identidade, que e o assunto do PA. O DPM
        ainda tem score em outra escala (de -0.5 a 4.8), o que complica escolher limiar.
   TV   Faster R-CNN do torchvision pre-treinado no COCO, classe person (detect.py)
 
 AP e IDF1 usam o mesmo gt, com as pessoas totalmente escondidas contando. Por isso o AP tem teto de
 recall nas sequencias com muita oclusao: na 02, 29% das caixas do gt tem visibilidade 0.
+O mAP50 por quadro e a media do AP50 dos quadros com pedestres, sem ponderar pelo numero de pessoas.
+O AP50 agregado da sequencia tambem fica salvo, com outro nome, para permitir a comparacao.
 
 Associacao ingenua (tracker.Ingenuo): IoU entre a ultima caixa vista de cada track e as deteccoes
 do quadro, Hungarian, limiar fixo, id novo quando nada casa, e a track morre depois de k quadros
@@ -32,7 +34,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 import mot
-from metrics import ap50, tira_distratores
+from metrics import ap50, map50_quadros, tira_distratores
 from tracker import Ingenuo, roda_seq
 
 FIG, RES = os.path.join(mot.AQUI, "figs"), os.path.join(mot.AQUI, "resultados")
@@ -42,7 +44,8 @@ SCORES = dict(SDP=[0.4, 0.7, 0.9, 0.99], TV=[0.3, 0.5, 0.7, 0.9])
 
 def ap(seq, fonte):
     ped, dis = mot.gt(seq)
-    return ap50(ped, tira_distratores(mot.det(seq, fonte), ped, dis))
+    det = tira_distratores(mot.det(seq, fonte), ped, dis)
+    return map50_quadros(ped, det), ap50(ped, det)
 
 
 def _idf1(tarefa):
@@ -69,7 +72,7 @@ def grafico(res, fontes):
     fig, (cima, baixo) = plt.subplots(2, 1, figsize=(10, 7.5), sharex=True)
     for fonte, ls in zip(fontes, ["-", "--"]):
         r = res[fonte]["seqs"]
-        cima.plot(x, [r[s]["AP50"] for s in ordem], ls, color="C0", marker="o", label=f"AP50 por quadro ({fonte})")
+        cima.plot(x, [r[s]["mAP50_quadros"] for s in ordem], ls, color="C0", marker="o", label=f"mAP50 por quadro ({fonte})")
         cima.plot(x, [r[s]["IDF1"] for s in ordem], ls, color="C1", marker="s", label=f"IDF1 ({fonte})")
         baixo.plot(x, [r[s]["razao_ids"] for s in ordem], ls, color="C2", marker="^", label=f"ids previstos / verdadeiros ({fonte})")
         baixo.plot(x, [r[s]["idsw_por_id"] for s in ordem], ls, color="C3", marker="v", label=f"ID switches por id verdadeiro ({fonte})")
@@ -94,9 +97,11 @@ def main():
     os.makedirs(FIG, exist_ok=True)
     os.makedirs(RES, exist_ok=True)
 
-    res = dict(ap_publicas={f: {s: ap(s, f) for s in mot.TODAS} for f in ["DPM", "FRCNN", "SDP"]})
-    for f, v in res["ap_publicas"].items():
-        print(f"AP50 medio {f}: {np.mean(list(v.values())):.3f}", {s: round(a, 3) for s, a in v.items()})
+    medidas = {f: {s: ap(s, f) for s in mot.TODAS} for f in ["DPM", "FRCNN", "SDP"]}
+    res = dict(map50_quadros_publicas={f: {s: v[0] for s, v in d.items()} for f, d in medidas.items()},
+               ap50_seq_publicas={f: {s: v[1] for s, v in d.items()} for f, d in medidas.items()})
+    for f, v in res["map50_quadros_publicas"].items():
+        print(f"mAP50 por quadro medio {f}: {np.mean(list(v.values())):.3f}", {s: round(a, 3) for s, a in v.items()})
 
     for fonte in args.fontes:
         with ProcessPoolExecutor(args.procs) as pool:
@@ -105,7 +110,7 @@ def main():
         for s in mot.TODAS:
             m, _ = roda_seq(s, Ingenuo(), fonte, **kw)
             seqs[s] = {k: float(v) for k, v in m.items()}
-            seqs[s]["AP50"] = ap(s, fonte)
+            seqs[s]["mAP50_quadros"], seqs[s]["AP50_seq"] = ap(s, fonte)
             seqs[s]["guloso_IDF1"] = float(roda_seq(s, Ingenuo(), fonte, guloso=True, **kw)[0]["IDF1"])
             print(fonte, s, {k: round(v, 3) for k, v in seqs[s].items()}, flush=True)
         res[fonte] = dict(params=kw, seqs=seqs)
