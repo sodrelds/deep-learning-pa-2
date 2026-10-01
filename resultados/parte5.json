@@ -1,0 +1,111 @@
+{
+  "experimento": "qualidade do detector",
+  "checkpoint": "checkpoints/ablacao_regime/teacher_clip1_s0.pt",
+  "detector": "SDP",
+  "tracker": {
+    "iou_min": 0.3,
+    "k": 60,
+    "score_min": 0.7
+  },
+  "seed": 20261001,
+  "niveis": {
+    "limpo": {
+      "p_drop": 0.0,
+      "ruido": 0.0,
+      "fp": 0.0
+    },
+    "leve": {
+      "p_drop": 0.1,
+      "ruido": 0.03,
+      "fp": 0.5
+    },
+    "medio": {
+      "p_drop": 0.25,
+      "ruido": 0.08,
+      "fp": 1.5
+    },
+    "forte": {
+      "p_drop": 0.5,
+      "ruido": 0.15,
+      "fp": 3.0
+    }
+  },
+  "resultados": {
+    "02": {
+      "limpo": {
+        "mAP50_quadros": 0.48402100164763073,
+        "AP50_seq": 0.4753043960534924,
+        "IDF1": 0.42889471604583496,
+        "IDSW": 345,
+        "Frag": 752,
+        "ids_pred": 168,
+        "n_deteccoes": 11639
+      },
+      "leve": {
+        "mAP50_quadros": 0.43540438539674103,
+        "AP50_seq": 0.4271679108211879,
+        "IDF1": 0.3730307370276523,
+        "IDSW": 460,
+        "Frag": 1422,
+        "ids_pred": 427,
+        "n_deteccoes": 10754
+      },
+      "medio": {
+        "mAP50_quadros": 0.34483441524304437,
+        "AP50_seq": 0.33400075847760813,
+        "IDF1": 0.2731324118135811,
+        "IDSW": 647,
+        "Frag": 2127,
+        "ids_pred": 830,
+        "n_deteccoes": 9642
+      },
+      "forte": {
+        "mAP50_quadros": 0.14420118107261673,
+        "AP50_seq": 0.11702936640479372,
+        "IDF1": 0.0798357484107869,
+        "IDSW": 1077,
+        "Frag": 2142,
+        "ids_pred": 1380,
+        "n_deteccoes": 7669
+      }
+    },
+    "10": {
+      "limpo": {
+        "mAP50_quadros": 0.7367126001140343,
+        "AP50_seq": 0.7334031444167948,
+        "IDF1": 0.5079899074852817,
+        "IDSW": 467,
+        "Frag": 416,
+        "ids_pred": 193,
+        "n_deteccoes": 10371
+      },
+      "leve": {
+        "mAP50_quadros": 0.6607974652435011,
+        "AP50_seq": 0.6573838922458248,
+        "IDF1": 0.42541763393873183,
+        "IDSW": 492,
+        "Frag": 1144,
+        "ids_pred": 494,
+        "n_deteccoes": 9673
+      },
+      "medio": {
+        "mAP50_quadros": 0.5079335790644625,
+        "AP50_seq": 0.4973236050392418,
+        "IDF1": 0.2427445613703931,
+        "IDSW": 989,
+        "Frag": 2098,
+        "ids_pred": 1047,
+        "n_deteccoes": 8805
+      },
+      "forte": {
+        "mAP50_quadros": 0.20418149971365865,
+        "AP50_seq": 0.16826351590055938,
+        "IDF1": 0.06496003237883234,
+        "IDSW": 1337,
+        "Frag": 2108,
+        "ids_pred": 1668,
+        "n_deteccoes": 7219
+      }
+    }
+  }
+}
