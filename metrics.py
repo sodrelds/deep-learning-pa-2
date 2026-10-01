@@ -36,21 +36,23 @@ def casa(m, limiar, guloso=False):
     """Pares (i, j) um-pra-um de uma matriz de IoU, so os que passam do limiar.
 
     O Hungarian maximiza a soma dos IoU dos pares validos. O guloso e o do PA1: vai do maior IoU
-    pro menor enquanto os dois lados estiverem livres.
+    pro menor enquanto os dois lados estiverem livres. O limiar pode ser escalar ou uma matriz
+    transmissivel para m, para ajustar o portao conforme a idade de cada track.
     """
     if m.size == 0:
         return []
+    limites = np.broadcast_to(limiar, m.shape)
     if guloso:
         pares, usou_i, usou_j = [], set(), set()
-        for i, j in sorted(zip(*np.nonzero(m >= limiar)), key=lambda p: -m[p]):
+        for i, j in sorted(zip(*np.nonzero(m >= limites)), key=lambda p: -m[p]):
             if i not in usou_i and j not in usou_j:
                 pares.append((i, j))
                 usou_i.add(i)
                 usou_j.add(j)
         return pares
     # par abaixo do limiar entra com custo 0, nao ajuda na soma e e filtrado depois
-    r, c = linear_sum_assignment(np.where(m >= limiar, -m, 0.0))
-    return [(i, j) for i, j in zip(r, c) if m[i, j] >= limiar]
+    r, c = linear_sum_assignment(np.where(m >= limites, -m, 0.0))
+    return [(i, j) for i, j in zip(r, c) if m[i, j] >= limites[i, j]]
 
 
 def nms(caixas, scores, limiar=0.5):
@@ -230,6 +232,7 @@ if __name__ == "__main__":
     gt = np.vstack([trilha(1, 10, t), trilha(2, 500, t)])
 
     assert abs(iou([0, 0, 10, 10], [5, 0, 10, 10])[0, 0] - 1 / 3) < 1e-9
+    assert casa(np.array([[0.25, 0.0], [0.29, 0.4]]), np.array([[0.2], [0.3]])) == [(0, 0), (1, 1)]
 
     # (a) previsao igual ao gt
     r = avalia(gt, gt.copy())

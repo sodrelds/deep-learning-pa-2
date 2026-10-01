@@ -75,17 +75,30 @@ class Kalman:
         return prev
 
 
-def rastreia(dets, preditor, iou_min=0.3, k=30, score_min=0.5, guloso=False):
-    """dets: frame, -1, x, y, w, h, score. Devolve frame, id, x, y, w, h."""
+def rastreia(dets, preditor, iou_min=0.3, k=30, score_min=0.5, guloso=False, com_trace=False,
+             iou_retorno=None, idade_retorno=15):
+    """dets: frame, -1, x, y, w, h, score. Devolve frame, id, x, y, w, h.
+
+    Com com_trace=True, devolve tambem (frame, id, caixa prevista xywh, quadros sem observar)
+    para cada track viva antes da associacao do quadro. Isso permite analisar falhas sem
+    alterar as decisoes do rastreador.
+    Se iou_retorno for dado, tracks sem observacao ha pelo menos idade_retorno quadros usam
+    esse limiar de IoU para tentar se associar de novo.
+    """
     dets = dets[dets[:, 6] >= score_min]
     if len(dets) == 0:
-        return np.zeros((0, 6))
+        vazio = np.zeros((0, 6))
+        return (vazio, np.zeros((0, 7))) if com_trace else vazio
     quadros, vazio = por_quadro(dets), np.zeros((0, 7))
-    vivas, saida, prox = [], [], 1
+    vivas, saida, trace, prox = [], [], [], 1
     for f in range(1, int(dets[:, 0].max()) + 1):
         d = quadros.get(f, vazio)
+        if com_trace:
+            trace.extend([f, t["id"], *t["prev"], t["parada"]] for t in vivas)
         prev = np.array([t["prev"] for t in vivas]).reshape(-1, 4)
-        pares = casa(iou(prev, d[:, 2:6]), iou_min, guloso)
+        limiar = iou_min if iou_retorno is None else np.array([
+            iou_retorno if t["parada"] >= idade_retorno else iou_min for t in vivas])[:, None]
+        pares = casa(iou(prev, d[:, 2:6]), limiar, guloso)
         obs = [None] * len(vivas)
         for i, j in pares:
             obs[i] = d[j, 2:6]
@@ -103,7 +116,8 @@ def rastreia(dets, preditor, iou_min=0.3, k=30, score_min=0.5, guloso=False):
                 prox += 1
         for t, p in zip(vivas, preditor.passo([t["estado"] for t in vivas], obs)):
             t["prev"] = p
-    return np.array(saida).reshape(-1, 6)
+    saida = np.array(saida).reshape(-1, 6)
+    return (saida, np.array(trace).reshape(-1, 7)) if com_trace else saida
 
 
 def roda_seq(seq, preditor, fonte="SDP", **kw):
@@ -128,4 +142,11 @@ if __name__ == "__main__":
     buraco = a[(a[:, 0] <= 15) | (a[:, 0] > 25)]
     assert len(np.unique(rastreia(buraco, Ingenuo(), iou_min=0.3, k=20)[:, 1])) == 2
     assert len(np.unique(rastreia(buraco, Kalman(), iou_min=0.3, k=20)[:, 1])) == 1
+    # IoU 0.25 na volta: o portao fixo 0.3 abre ID novo; o portao de retorno 0.2 recupera o ID.
+    curto = np.array([[1, -1, 0, 0, 10, 10, 1], [3, -1, 6, 0, 10, 10, 1]], float)
+    assert len(np.unique(rastreia(curto, Ingenuo(), iou_min=0.3, k=4)[:, 1])) == 2
+    pr, trace = rastreia(curto, Ingenuo(), iou_min=0.3, k=4, iou_retorno=0.2,
+                         idade_retorno=1, com_trace=True)
+    assert len(np.unique(pr[:, 1])) == 1
+    assert trace[(trace[:, 0] == 3) & (trace[:, 1] == 1)][0, 6] == 1
     print("ok, rastreador")
