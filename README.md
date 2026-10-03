@@ -11,7 +11,7 @@ da Parte 3 no eixo do regime de treino e a Parte 4 (galeria, horizonte de memór
 Testado com Python 3.13 e PyTorch 2.11 na CPU. Instalação:
 
 ```
-pip install torch torchvision numpy scipy matplotlib pillow
+pip install torch torchvision numpy scipy matplotlib pillow opencv-python
 ```
 
 Tudo roda na CPU menos o Faster R-CNN do torchvision, que aqui leva uns 6 s por quadro. Ele rodou
@@ -48,17 +48,26 @@ tem câmera parada e densa (04), 14 fps (05) e 25 fps (13).
 ## Treinar e avaliar
 
 ```
-python train.py       # treina o GRU e salva em checkpoints/gru_T16_s0.pt
-python evaluate.py    # ingênuo, Kalman e GRU nas sequências de teste
-python ablacao_regime.py  # Parte 3: 3 regimes x clipping ligado/desligado x 3 seeds
+python train.py       # Parte 2: treina o GRU e salva em checkpoints/gru_T16_s0.pt
+python evaluate.py    # Parte 2: ingênuo, Kalman e GRU nas sequências de teste
+python ablacao_regime.py --force  # Parte 3: 3 regimes x clipping ligado/desligado x 3 seeds
 python parte4.py       # horizonte de memória, galeria de falhas e correção
+```
+
+O `parte4.py`, o `parte5.py` e o notebook usam o modelo final, o teacher com clipping e seed 0 da
+Parte 3, que a ablação salva em `checkpoints/ablacao_regime/teacher_clip1_s0.pt`. A ablação inteira
+leva mais de 2 h na CPU. Pra gerar só o modelo final (uns 7 min):
+
+```
+python train.py --validacao-regime free --saida checkpoints/ablacao_regime/teacher_clip1_s0.pt
 ```
 
 O `evaluate.py` usa o limiar de score que a Parte 1 congelou em `resultados/parte1.json`, então na
 primeira vez tem que rodar o `python parte1.py` antes. O checkpoint é pequeno e já está no repo.
 `ablacao_regime.py` salva cada checkpoint em `checkpoints/ablacao_regime/`, os números por seed e
-média ± desvio em `resultados/parte3_regime.json` e o gráfico em `figs/parte3_regime.png`. Pode ser
-interrompido e retomado sem repetir configurações já concluídas.
+média ± desvio em `resultados/parte3_regime.json` e o gráfico em `figs/parte3_regime.png`. O
+`--force` é porque o json do repo já tem as 18 configurações, e sem ele o script pula as que estão
+lá. Isso serve pra retomar sem o `--force` depois de uma interrupção.
 
 Para a Parte 4, as curvas e métricas rodam só com o `MOT17Labels.zip` (`python parte4.py --sem-galeria`).
 Para gerar as três tiras sem baixar o ZIP inteiro de imagens, busque apenas os

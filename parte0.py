@@ -1,18 +1,8 @@
-"""Parte 0: testes no sintetico, antes de encostar no MOT17.
+"""Parte 0 no sintetico: figura da oclusao, testes das metricas, baseline no piso facil e girando
+os botoes do gerador. Avalia contra o gt visivel (vis >= 0.3).
 
-  1. figura de uma elipse que some atras do oclusor por N quadros e volta
-  2. os casos feitos na mao das metricas (o __main__ do metrics.py)
-  3. o baseline ingenuo no piso facil: poucas elipses, lentas, sem oclusor
-  4. o baseline girando os botoes do gerador: mais objetos, mais rapidos, oclusao mais longa
-
-A avaliacao aqui e contra o gt visivel (visibilidade >= 0.3, o mesmo corte do simulador de
-detector). Caixa escondida nenhum rastreador por deteccao consegue devolver, e o que interessa no
-sintetico e se o id sobrevive ao buraco.
-
-No botao da oclusao o IDF1 engana: com o oclusor largo e so 60 quadros, muita elipse entra atras
-dele e nao sai ate o video acabar, entao nunca troca de id, e o IDF1 sobe com a oclusao mais longa.
-Por isso esse painel mostra tambem a fracao dos buracos em que o id sobrevive (metrics.sobrevivencia),
-que mede direto o que o botao muda.
+No botao da oclusao o IDF1 sobe, porque muita elipse entra atras do oclusor e nao sai ate o fim
+do video. Por isso o painel mostra tambem a fracao dos buracos em que o id sobrevive.
 
   python parte0.py
 """

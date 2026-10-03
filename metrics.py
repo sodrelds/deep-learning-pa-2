@@ -1,21 +1,9 @@
-"""Metricas de rastreamento feitas na mao (motmetrics e TrackEval sao proibidos no PA).
+"""Metricas de rastreamento feitas na mao, mais NMS e matching por IoU.
 
-Tudo aqui usa arrays com uma caixa por linha: frame, id, x, y, w, h, ... com (x, y) no canto de
-cima a esquerda, igual ao gt.txt do MOT17. Deteccao sem id usa -1 na coluna do id e o score na
-coluna 6, igual ao det.txt.
-
-IDF1: atribuicao global um-pra-um entre ids verdadeiros e previstos na sequencia inteira. Pra cada
-par (gt i, previsto j) conta em quantos quadros as caixas se sobrepoem com IoU >= 0.5 e o
-Hungarian escolhe os pares que maximizam a soma. Essa soma e o IDTP, e
-IDF1 = 2 IDTP / (caixas do gt + caixas previstas).
-
-ID switch e fragmentacao saem de um casamento quadro a quadro. Um par que casou no quadro anterior
-e ainda passa do limiar continua casado, o resto vai pro Hungarian. Sem essa regra, dois gts lado
-a lado trocam de par por causa de ruido e aparecem switches que nao aconteceram. Switch e o gt
-casar com um id previsto diferente do ultimo com que tinha casado, mesmo depois de um buraco.
-Fragmentacao e o gt que estava rastreado ficar sem casar e depois voltar a casar.
-
-NMS e o matching tambem ficam aqui porque usam o mesmo IoU.
+Caixas no formato do MOT17: frame, id, x, y, w, h, ... (deteccao com id -1 e score na coluna 6).
+IDF1: Hungarian global entre ids do gt e previstos, contando os quadros com IoU >= 0.5.
+ID switch e fragmentacao: casamento quadro a quadro, e o par do quadro anterior continua casado
+se ainda passa do limiar, pra ruido na caixa nao inventar troca.
 """
 import numpy as np
 from scipy.optimize import linear_sum_assignment
@@ -33,12 +21,8 @@ def iou(a, b):
 
 
 def casa(m, limiar, guloso=False):
-    """Pares (i, j) um-pra-um de uma matriz de IoU, so os que passam do limiar.
-
-    O Hungarian maximiza a soma dos IoU dos pares validos. O guloso e o do PA1: vai do maior IoU
-    pro menor enquanto os dois lados estiverem livres. O limiar pode ser escalar ou uma matriz
-    transmissivel para m, para ajustar o portao conforme a idade de cada track.
-    """
+    """Pares (i, j) um-pra-um acima do limiar, por Hungarian ou guloso (o do PA1). O limiar pode
+    ser uma matriz, pra ter portao diferente por track."""
     if m.size == 0:
         return []
     limites = np.broadcast_to(limiar, m.shape)
@@ -56,8 +40,7 @@ def casa(m, limiar, guloso=False):
 
 
 def nms(caixas, scores, limiar=0.5):
-    """NMS dos slides: pega a caixa de maior score, joga fora quem tem IoU >= limiar com ela e
-    repete com o que sobrou. Devolve os indices das caixas que ficam."""
+    """NMS dos slides. Devolve os indices das caixas que ficam."""
     ordem = np.argsort(-np.asarray(scores), kind="stable")
     fica = []
     while len(ordem):
@@ -75,10 +58,8 @@ def por_quadro(a):
 
 
 def tira_distratores(pr, ped, dis, limiar=0.5):
-    """Tira as caixas previstas que casam com um distrator do gt (pessoa parada, pessoa em veiculo,
-    reflexo...). Detectar essas coisas nao conta nem como acerto nem como erro. O casamento e feito
-    junto com os pedestres, entao uma caixa em cima de um pedestre de verdade nao some so porque
-    tem um distrator do lado."""
+    """Tira as previsoes que casam com distrator do gt. O casamento inclui os pedestres, pra caixa
+    de um pedestre ao lado de um distrator nao sumir."""
     if len(dis) == 0 or len(pr) == 0:
         return pr
     todos = np.vstack([np.column_stack([ped[:, :6], np.zeros(len(ped))]),
@@ -94,10 +75,7 @@ def tira_distratores(pr, ped, dis, limiar=0.5):
 
 
 def ap50(gt, det, limiar=0.5):
-    """AP da classe pessoa com IoU >= 0.5, do jeito dos slides: ordena as deteccoes por score,
-    monta a curva precisao x recall, usa a precisao interpolada (a maior precisao em qualquer
-    recall acima) e faz a media nos niveis de recall. Junta todos os quadros da sequencia, porque
-    AP por quadro fica instavel em quadro com duas pessoas."""
+    """AP50 com todos os quadros juntos, com a precisao interpolada dos slides."""
     if len(det) == 0:
         return 0.0
     gq = por_quadro(gt)
@@ -121,11 +99,7 @@ def ap50(gt, det, limiar=0.5):
 
 
 def map50_quadros(gt, det, limiar=0.5):
-    """Media do AP50 dos quadros com ao menos um pedestre verdadeiro.
-
-    Quadros sem pedestre ficam fora da media: AP nao tem recall definido neles. Deteccoes
-    nesses quadros continuam sendo falsos positivos no AP50 agregado da sequencia.
-    """
+    """Media do AP50 dos quadros com pedestre (sem pedestre o recall nao e definido)."""
     gq, dq = por_quadro(gt), por_quadro(det) if len(det) else {}
     vazio = np.zeros((0, det.shape[1] if det.ndim == 2 else 7))
     return float(np.mean([ap50(g, dq.get(f, vazio), limiar) for f, g in gq.items()])) if gq else 0.0
@@ -193,10 +167,8 @@ def trocas(gt, pr, limiar=0.5):
 
 
 def sobrevivencia(gt, pr, vis_min=0.3, janela=5, limiar=0.5):
-    """Pra cada vez que um objeto do gt fica escondido (visibilidade < vis_min) e depois aparece de
-    novo, confere se o rastreador deu o mesmo id antes e depois do buraco. Procura o casamento ate
-    `janela` quadros antes e depois, porque o detector pode demorar a pegar a pessoa de volta.
-    Buraco sem casamento dos dois lados fica de fora. Devolve uma lista de (duracao, sobreviveu)."""
+    """(duracao, mesmo id) de cada buraco com visibilidade < vis_min, olhando ate `janela` quadros
+    de cada lado. Buraco sem casamento dos dois lados fica de fora."""
     cas = casamentos(gt, pr, limiar)
     out = []
     for gid in np.unique(gt[:, 1]):
@@ -259,9 +231,8 @@ if __name__ == "__main__":
     r = avalia(gt, buraco)
     assert r["IDSW"] == 1 and r["Frag"] == 1 and abs(r["IDF1"] - 300 / 390) < 1e-9, r
 
-    # regra de continuidade: o previsto 7 segue o gt 1 e o 8 segue o gt 2, mas no quadro 50 as
-    # caixas previstas trocam de lugar. O Hungarian puro trocaria os pares (soma 2.0 contra 1.33)
-    # e contaria 4 switches. Como os pares antigos ainda passam de 0.5, ficam
+    # continuidade: no quadro 50 as previstas trocam de lugar, mas os pares antigos ainda passam
+    # de 0.5 e ficam. O Hungarian puro contaria 4 switches
     a, b = trilha(1, 10, t), trilha(2, 20, t)
     pa, pb = a.copy(), b.copy()
     pa[:, 1], pb[:, 1] = 7, 8

@@ -1,18 +1,7 @@
-"""Leitura do MOT17.
+"""Leitura do MOT17 (MOT17Labels.zip e MOT17Det.zip extraidos em data/MOT17 ou em MOT17_DIR).
 
-Os labels vem do MOT17Labels.zip (gt e det dos tres detectores publicos) e as imagens do
-MOT17Det.zip, que tem cada sequencia uma vez so (o MOT17.zip repete as imagens pros tres
-detectores e pesa 5.5 GB). Os dois vao extraidos na mesma pasta, que por padrao e data/MOT17 e
-pode ser trocada pela variavel MOT17_DIR.
-
-So as 7 sequencias de treino do MOTChallenge tem gt, entao o split sai delas, sempre por
-sequencia inteira:
-
-  treino  04 05 11 13   parada e densa (04), camera andando a 14 fps (05), shopping com a camera
-                        andando (11), onibus a 25 fps (13)
-  val     09            parada e com pouca gente, usada pra escolher limiar e epoca
-  teste   02 10         o modelo nunca ve: uma parada com muita oclusao (02) e uma com a camera
-                        andando de noite (10)
+Split por sequencia inteira, so nas 7 que tem gt: treino 04 05 11 13, val 09 (limiar e epoca),
+teste 02 (parada, muita oclusao) e 10 (camera andando, de noite).
 """
 import configparser
 import os
@@ -45,8 +34,7 @@ def gt(seq):
 
 
 def det(seq, fonte="SDP"):
-    """Deteccoes com colunas frame, -1, x, y, w, h, score. A fonte e DPM, FRCNN, SDP ou TV (a do
-    torchvision, gerada pelo detect.py)."""
+    """frame, -1, x, y, w, h, score. Fonte DPM, FRCNN, SDP ou TV (detect.py)."""
     if fonte == "TV":
         caminho = os.path.join(AQUI, "dets", f"MOT17-{seq}-TV.txt")
     else:
@@ -59,5 +47,5 @@ def imagem(seq, frame):
 
 
 def oclusao(seq):
-    """Fracao das caixas de pedestre com menos de metade visivel. E o eixo de dificuldade dos graficos."""
+    """Fracao das caixas de pedestre com menos de metade visivel (eixo dos graficos)."""
     return float(np.mean(gt(seq)[0][:, 6] < 0.5))

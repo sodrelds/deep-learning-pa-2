@@ -1,7 +1,4 @@
-"""Baixa so os quadros necessarios para a galeria da Parte 4 do ZIP oficial.
-
-O servidor do MOTChallenge aceita HTTP Range. O zipfile le o diretorio central e apenas os
-JPEGs pedidos, sem precisar baixar os 1,9 GB do MOT17Det.zip. Os arquivos vao para data/MOT17.
+"""Baixa do MOT17Det.zip, por HTTP Range, so os quadros da galeria da Parte 4 (vao pra data/MOT17).
 
   python fetch_frames.py 02:155,156,157 09:308,309,380 10:187,188,291
 """

@@ -1,14 +1,8 @@
-"""Rastreamento por deteccao. O laco e o mesmo pra todos, so muda quem preve onde cada track vai
-estar no quadro seguinte:
+"""Rastreamento por deteccao. O laco e o mesmo pra todos, so muda o preditor da caixa seguinte:
+Ingenuo (ultima caixa), Kalman (velocidade constante, so baseline) ou PreditorRNN (model.py).
 
-  Ingenuo       a caixa prevista e a ultima caixa observada (Parte 1)
-  Kalman        filtro de Kalman de velocidade constante, so como baseline de comparacao
-  PreditorRNN   o modelo recorrente da Parte 2, no model.py
-
-Regra de associacao: IoU entre a caixa prevista de cada track viva e as deteccoes do quadro, com
-Hungarian (ou guloso) e limiar fixo. Deteccao com score acima do limiar que nao casa com nenhuma
-track vira track nova, com id novo. Track que passa k quadros seguidos sem casar morre. A saida so
-tem caixa nos quadros em que a track casou com uma deteccao, e a caixa e a da deteccao.
+Associacao: Hungarian no IoU entre caixa prevista e deteccao, com limiar fixo. Deteccao sem par
+vira track nova e track k quadros sem casar morre. A saida usa a caixa da deteccao.
 """
 import numpy as np
 
@@ -43,8 +37,7 @@ class Ingenuo:
 
 
 class Kalman:
-    """Estado cx, cy, w, h e as quatro velocidades. Os ruidos sao proporcionais a altura da caixa:
-    r e o desvio da medida e q o do processo, os dois como fracao da altura."""
+    """Estado cx, cy, w, h e velocidades. q (processo) e r (medida) sao fracoes da altura da caixa."""
     F = np.block([[np.eye(4), np.eye(4)], [np.zeros((4, 4)), np.eye(4)]])
     H = np.eye(4, 8)
 
@@ -79,11 +72,8 @@ def rastreia(dets, preditor, iou_min=0.3, k=30, score_min=0.5, guloso=False, com
              iou_retorno=None, idade_retorno=15):
     """dets: frame, -1, x, y, w, h, score. Devolve frame, id, x, y, w, h.
 
-    Com com_trace=True, devolve tambem (frame, id, caixa prevista xywh, quadros sem observar)
-    para cada track viva antes da associacao do quadro. Isso permite analisar falhas sem
-    alterar as decisoes do rastreador.
-    Se iou_retorno for dado, tracks sem observacao ha pelo menos idade_retorno quadros usam
-    esse limiar de IoU para tentar se associar de novo.
+    com_trace: devolve tambem (frame, id, caixa prevista, quadros sem observar) de cada track viva.
+    iou_retorno: limiar pra track sem observacao ha idade_retorno quadros ou mais.
     """
     dets = dets[dets[:, 6] >= score_min]
     if len(dets) == 0:
@@ -121,8 +111,7 @@ def rastreia(dets, preditor, iou_min=0.3, k=30, score_min=0.5, guloso=False, com
 
 
 def roda_seq(seq, preditor, fonte="SDP", **kw):
-    """Rastreia uma sequencia do MOT17 e avalia contra os pedestres do gt, depois de tirar as
-    caixas que casam com distrator. Devolve as metricas e as caixas rastreadas."""
+    """Rastreia e avalia uma sequencia contra os pedestres do gt, sem os distratores."""
     ped, dis = mot.gt(seq)
     pr = tira_distratores(rastreia(mot.det(seq, fonte), preditor, **kw), ped, dis)
     return avalia(ped, pr), pr
@@ -137,8 +126,7 @@ if __name__ == "__main__":
     for p in [Ingenuo(), Kalman()]:
         out = rastreia(np.vstack([a, b]), p, iou_min=0.3, k=5)
         assert len(np.unique(out[:, 1])) == 2 and len(out) == 80
-    # buraco de 10 quadros no meio andando a 3 px/quadro: a caixa parada do ingenuo nao alcanca
-    # mais a pessoa quando ela volta (id novo), o Kalman continua andando e acha
+    # buraco de 10 quadros: o ingenuo perde a pessoa e o Kalman acha
     buraco = a[(a[:, 0] <= 15) | (a[:, 0] > 25)]
     assert len(np.unique(rastreia(buraco, Ingenuo(), iou_min=0.3, k=20)[:, 1])) == 2
     assert len(np.unique(rastreia(buraco, Kalman(), iou_min=0.3, k=20)[:, 1])) == 1

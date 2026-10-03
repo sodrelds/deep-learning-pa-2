@@ -1,9 +1,6 @@
-"""Parte 5: estresse de qualidade do detector, sem retreinar o GRU.
-
-As deteccoes SDP sao degradadas em tres intensidades por descarte, ruido nas caixas e
-falsos positivos. A mesma realizacao aleatoria e escalada entre os niveis, para que
-as comparacoes nao dependam de tres sorteios independentes. O checkpoint e os limiares
-do rastreador sao os da Parte 4 antes da correcao, pois ela piorou o IDF1 em MOT17-10.
+"""Parte 5: qualidade do detector, sem retreinar. As deteccoes SDP perdem caixas e ganham ruido e
+falsos positivos em tres niveis, com o mesmo sorteio escalado entre eles. Usa o rastreador da
+Parte 4 sem a correcao, que piorou a 10.
 
   python parte5.py
 """
@@ -51,7 +48,7 @@ def sorteios(seq, det):
 
 
 def degrada(det, nivel, sorteado):
-    """Preserva score e formato MOT; ruido relativo a largura/altura de cada caixa."""
+    """Ruido relativo ao tamanho de cada caixa."""
     cfg = NIVEIS[nivel]
     if nivel == "limpo":
         return det.copy()
@@ -59,7 +56,7 @@ def degrada(det, nivel, sorteado):
     z = sorteado["desloc"][sorteado["drop"] >= cfg["p_drop"]]
     d[:, 2:6] += cfg["ruido"] * z * d[:, [4, 5, 4, 5]]
     d[:, 4:6] = np.maximum(d[:, 4:6], 1.0)
-    # Um processo de Poisson(3) afinado gera, em media, fp falsos por quadro.
+    # afinar o Poisson(3) da fp falsos por quadro em media
     falsos = sorteado["fp"][sorteado["fp_ordem"] < cfg["fp"] / 3.0]
     return np.vstack([d, falsos])
 

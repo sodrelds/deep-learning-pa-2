@@ -1,7 +1,5 @@
-"""Roda o detect.py na GPU do Kaggle. Na CPU daqui seriam umas 9 h.
-
-Os .py que o detector usa vao em base64 dentro de um notebook, igual no PA1. O notebook baixa o
-MOT17 do site do MOTChallenge, roda o detector nas 7 sequencias e a pasta dets/ volta no output.
+"""Roda o detect.py na GPU do Kaggle. Os .py vao em base64 num notebook, como no PA1, e os dets/
+voltam no output.
 
   python kaggle_run.py            # manda o notebook pro Kaggle
   python kaggle_run.py --status

@@ -1,8 +1,9 @@
-"""Treina o modelo de movimento da Parte 2 nas trajetorias do gt de treino (04 05 11 13), escolhe
-a epoca pela perda na validacao (09) e salva o checkpoint em checkpoints/.
+"""Treina o modelo de movimento no gt de treino, escolhe a epoca pela validacao (09) e salva em
+checkpoints/.
 
-  python train.py                                  # o modelo final: GRU, 64 de estado, T = 16
-  python train.py --celula lstm --T 32 --seed 2    # uma configuracao do Eixo 1
+  python train.py              # GRU da Parte 2 (checkpoints/gru_T16_s0.pt)
+  python train.py --validacao-regime free --saida checkpoints/ablacao_regime/teacher_clip1_s0.pt
+                               # modelo final, usado nas Partes 4 e 5 e na inferencia
 """
 import argparse
 import os

@@ -1,16 +1,8 @@
-"""Parte 1: deteccoes do Faster R-CNN do torchvision (pre-treinado no COCO, classe person), sem
-treinar nada.
+"""Parte 1: Faster R-CNN do torchvision (COCO, classe person), sem treino.
 
-O modelo do torchvision roda uma NMS no final (torchvision.ops.batched_nms) e o PA pede que a NMS
-seja nossa. Por isso o modelo e criado com box_nms_thresh=1.0, que deixa essa NMS sem efeito (ela
-so corta caixa com IoU > 1), e a nms() do metrics.py roda em cima da saida, so na classe pessoa.
-A NMS de dentro da RPN, que filtra propostas antes da cabeca, continua, porque faz parte do modelo.
-
-Grava tudo com score >= 0.05 porque o AP precisa dos scores baixos. O limiar do rastreamento e
-escolhido depois, no parte1.py.
-
-Na CPU daqui leva uns 6 s por quadro, umas 9 h pras 7 sequencias, entao roda no Kaggle
-(kaggle_run.py). O codigo e o mesmo, so muda o device.
+box_nms_thresh=1.0 desliga a NMS final do torchvision e a nms() do metrics.py roda no lugar (a
+da RPN fica, faz parte do modelo). Grava score >= 0.05 porque o AP precisa dos baixos. Na CPU
+leva umas 9 h, entao roda no Kaggle (kaggle_run.py).
 
   python detect.py                 # as 7 sequencias de treino, grava em dets/
   python detect.py --seqs 02 10

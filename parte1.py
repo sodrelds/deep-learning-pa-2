@@ -1,24 +1,9 @@
-"""Parte 1: baseline por quadro no MOT17.
+"""Parte 1: baseline ingenuo no MOT17 com as deteccoes SDP (a publica de maior mAP50 por quadro) e
+as do Faster R-CNN do torchvision (TV, detect.py).
 
-Duas fontes de deteccao, nenhuma treinada por nos:
-  SDP  deteccao publica que vem no MOT17. Dos tres detectores publicos e o de maior mAP50 por
-       quadro nas 7 sequencias, por isso e a fonte padrao do
-       resto do PA. Com deteccao boa, o que quebra e a identidade, que e o assunto do PA. O DPM
-       ainda tem score em outra escala (de -0.5 a 4.8), o que complica escolher limiar.
-  TV   Faster R-CNN do torchvision pre-treinado no COCO, classe person (detect.py)
-
-AP e IDF1 usam o mesmo gt, com as pessoas totalmente escondidas contando. Por isso o AP tem teto de
-recall nas sequencias com muita oclusao: na 02, 29% das caixas do gt tem visibilidade 0.
-O mAP50 por quadro e a media do AP50 dos quadros com pedestres, sem ponderar pelo numero de pessoas.
-O AP50 agregado da sequencia tambem fica salvo, com outro nome, para permitir a comparacao.
-
-Associacao ingenua (tracker.Ingenuo): IoU entre a ultima caixa vista de cada track e as deteccoes
-do quadro, Hungarian, limiar fixo, id novo quando nada casa, e a track morre depois de k quadros
-sem observacao. O limiar de IoU, o k e o score minimo da deteccao saem da media de IDF1 nas
-sequencias de treino e validacao (04 05 09 11 13), nunca nas de teste, e valem pras 7.
-
-As sequencias do grafico vao em ordem de oclusao: fracao das caixas de pedestre com menos de metade
-visivel, tirada do campo visibility do gt.
+O gt inclui pessoas escondidas, entao o AP tem teto de recall nas cenas com oclusao (na 02, 29%
+das caixas tem visibilidade 0). Limiar de IoU, k e score minimo saem do IDF1 medio em treino+val.
+O grafico ordena as sequencias pela fracao de caixas com menos de metade visivel.
 
   python parte1.py              # SDP e TV
   python parte1.py --fontes SDP

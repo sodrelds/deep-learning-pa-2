@@ -1,8 +1,5 @@
-"""Inferencia em uma sequencia de imagens: caixas com IDs persistentes e contagem unica.
-
-Aceita uma pasta com img1/ (ou a propria pasta das imagens). Se houver det/det.txt,
-usa essas deteccoes; caso contrario usa o Faster R-CNN do detect.py, sem treino.
-O rastreador usa o checkpoint e os parametros finais documentados na Parte 4.
+"""Video com os ids em cores fixas e a contagem de ids unicos de uma sequencia, sem retreinar.
+Usa det/det.txt se existir, senao o Faster R-CNN do detect.py.
 """
 import colorsys
 from pathlib import Path
@@ -71,12 +68,7 @@ def cor(pid):
 
 def gerar_video(sequencia, saida="inferencia.mp4", deteccoes=None, fps=25,
                 largura_max=1280, checkpoint=CKPT):
-    """Devolve (caminho do MP4, numero de IDs unicos), sem retreinar.
-
-    `sequencia` aponta para pasta com img1/ ou diretamente para imagens. `deteccoes`
-    opcional aponta para det.txt no formato MOT. Sem ele, procura seq/det/det.txt;
-    na ausencia desse arquivo executa o detector torchvision quadro a quadro.
-    """
+    """Devolve (caminho do mp4, numero de ids unicos). `deteccoes` e um det.txt opcional."""
     seq, imagens, frames = imagens_e_frames(sequencia)
     det, fonte = obter_deteccoes(seq, imagens, frames, deteccoes)
     torch.set_num_threads(2)

@@ -1,21 +1,10 @@
-"""Parte 2: o GRU contra o baseline ingenuo nas sequencias de teste (02 e 10), com as mesmas
-deteccoes SDP e as mesmas metricas da Parte 1. O Kalman de velocidade constante entra so como
-referencia.
+"""Parte 2: ingenuo, Kalman (so referencia) e GRU nas sequencias de teste, com as deteccoes SDP e
+o score minimo congelados na Parte 1. Limiar de IoU e k de cada metodo saem do IDF1 em treino+val.
 
-A fonte de deteccao e o score minimo ficam congelados na Parte 1 (resultados/parte1.json). Entre
-os metodos so muda o que acontece entre os quadros, a caixa prevista que entra no IoU da
-associacao. O limiar de IoU e o k de cada metodo (e o q do Kalman) saem da media de IDF1 no
-treino+val, como na Parte 1.
-
-Mais duas medidas pra entender de onde vem a diferenca:
-  horizonte  no gt de val e teste, sem detector: a track ve a pessoa por 10 quadros (com o ruido
-             das deteccoes) e depois passa h quadros sem observacao, com a previsao andando
-             sozinha, como numa oclusao. Mede o IoU entre a caixa prevista e a verdadeira em cada h.
-  buracos    nas sequencias de teste, a fracao das vezes em que a pessoa some (visibilidade < 0.3)
-             e volta com o mesmo id, separada pela duracao do buraco.
+Mede tambem o horizonte (IoU da previsao h quadros depois da ultima observacao, no gt) e a fracao
+dos buracos em que a pessoa volta com o mesmo id.
 
   python evaluate.py
-  python evaluate.py --ckpt checkpoints/lstm_T32_s0.pt
 """
 import argparse
 import itertools
@@ -68,9 +57,7 @@ def ajusta(metodo, ckpt, score_min, pool):
 
 
 def horizonte(metodo, ckpt, q, visto=10, H=30):
-    """IoU medio entre caixa prevista e verdadeira h = 1..H quadros depois da ultima observacao,
-    em pedacos de trajetoria do gt de val e teste (model.previsao_livre). As observacoes levam o
-    mesmo ruido das deteccoes, igual pros tres metodos."""
+    """IoU medio da previsao h = 1..H quadros depois da ultima observacao, no gt de val e teste."""
     jan = []
     for s in mot.VAL + mot.TESTE:
         ped = mot.gt(s)[0]

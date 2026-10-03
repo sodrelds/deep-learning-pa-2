@@ -1,16 +1,8 @@
 """Parte 0: gerador de video sintetico e simulador de detector.
 
-O gerador desenha elipses em movimento num quadro 128x128 em ordem de profundidade, de tras pra
-frente, entao quem esta atras some de verdade quando passa atras de outra. A visibilidade de cada
-elipse e a fracao dos pixels dela que sobrou no desenho final, o mesmo significado do campo
-visibility do MOT17, e o gt continua existindo durante a oclusao, igual la.
-
-Pra controlar a duracao da oclusao tem um oclusor, uma elipse grande e parada na frente de todo
-mundo, no meio do quadro. Ela e bem mais alta que o quadro (vira uma faixa vertical) e a largura e
-calculada pra uma elipse de tamanho medio, cruzando na horizontal na velocidade tipica, ficar
-inteira escondida por `oclusao` quadros. Os objetos andam mais na horizontal (ate 30 graus) e
-quicam nas bordas. O buraco na deteccao sai um pouco maior que `oclusao`, porque a visibilidade
-cai abaixo de 0.3 antes da elipse sumir inteira e as elipses mais lentas demoram mais pra cruzar.
+Elipses desenhadas em ordem de profundidade num quadro 128x128. A visibilidade e a fracao dos
+pixels que sobra, como no MOT17. O oclusor e uma faixa vertical parada no meio, larga o bastante
+pra esconder uma elipse media na velocidade tipica por `oclusao` quadros.
 """
 import numpy as np
 
@@ -65,8 +57,7 @@ def gera(n_obj=8, vel=1.5, oclusao=0, T=45, ruido=0.05, contraste=(0.3, 0.8), se
 def detector(gt, p_drop=0.0, ruido=0.0, fp=0.0, vis_min=0.3, seed=0):
     """Estraga as caixas verdadeiras de proposito. Devolve frame, -1, x, y, w, h, score.
 
-    vis_min  elipse com menos visibilidade que isso nao e detectada, e assim que a oclusao vira
-             buraco na deteccao
+    vis_min  abaixo dessa visibilidade a elipse nao e detectada
     p_drop   fracao das caixas visiveis descartadas ao acaso
     ruido    desvio do ruido nas coordenadas, relativo ao tamanho da caixa
     fp       media de falsos positivos por quadro, em lugar aleatorio

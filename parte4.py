@@ -1,10 +1,8 @@
-"""Parte 4: gradiente, horizonte empirico, tres falhas e correcao antes/depois.
+"""Parte 4: horizonte de memoria (gradiente e empirico), tres falhas e correcao antes/depois.
+Checkpoint: teacher com clipping, seed 0, o melhor na validacao 09 da Parte 3.
 
-Modelo e limiares escolhidos sem olhar o teste: teacher com clipping foi o grupo de maior IDF1
-medio na validacao 09 na Parte 3; a seed 0 foi a melhor desse grupo na mesma validacao.
-
-  python parte4.py --sem-galeria    # calcula medidas e informa quais imagens faltam
-  python parte4.py                # gera tambem as tiras apos obter os quadros
+  python parte4.py --sem-galeria    # so as medidas
+  python parte4.py                  # com as tiras (quadros via fetch_frames.py)
 """
 import argparse
 import json
@@ -28,9 +26,7 @@ from tracker import rastreia
 
 CKPT = os.path.join(mot.AQUI, "checkpoints", "ablacao_regime", "teacher_clip1_s0.pt")
 BASE = dict(iou_min=0.3, k=60, score_min=0.7)
-# Na validacao 09, o GT10 volta apos 71 quadros com IoU de 0.227 entre a caixa prevista e
-# a deteccao correta, abaixo do portao 0.3. Permitir 0.2 apos 10 quadros sem observacao.
-# As sequencias 02/10 nao entram na escolha da mudanca.
+# na 09 o GT10 volta depois de 71 quadros com IoU 0.227 contra a deteccao certa, abaixo de 0.3
 CORRECAO = dict(iou_retorno=0.2, idade_retorno=10)
 SEQS = mot.VAL + mot.TESTE
 RES = os.path.join(mot.AQUI, "resultados", "parte4.json")
@@ -107,11 +103,8 @@ def eventos_oclusao(seq, ped, pr, trace):
 
 
 def gradiente_memoria(modelo, K=64, aquecimento=16, n_janelas=96):
-    """Norma de dL_t/dh_(t-k) em janelas reais de GT com oclusoes e ruido de deteccao.
-
-    O grafo da recorrencia fica inteiro nesta medicao. No treino, detach a cada 16 passos
-    impediria o gradiente de atravessar mais de 16 passos; a curva mostra o decaimento intrinseco.
-    """
+    """Norma de dL_t/dh_(t-k) em janelas reais do gt, com o grafo inteiro e com o detach a cada
+    16 passos do treino."""
     total = K + aquecimento + 1
     candidatos = []
     for seq in SEQS:
@@ -334,7 +327,7 @@ def main():
         eventos.extend(eventos_oclusao(seq, ped, pr, trace))
         eventos_corr.extend(eventos_oclusao(seq, ped_corr, pr_corr, trace_corr))
         print(seq, "base", round(met["IDF1"], 4), "corrigido", round(met_corr["IDF1"], 4), flush=True)
-    # Este ajuste usa apenas a sequencia 09; o teste 02/10 nao escolhe o portao.
+    # so a 09 escolhe o portao
     grade = {"0.3 (fixo)": base["09"]["IDF1"], "0.2": corr["09"]["IDF1"]}
     for gate in (0.25, 0.15):
         _, _, _, met = rastreia_seq("09", modelo, iou_retorno=gate, idade_retorno=10)

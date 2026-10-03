@@ -1,8 +1,5 @@
-"""Parte 3, eixo 2: observacoes sempre presentes, scheduled sampling e previsao livre.
-
-Cada configuracao usa as mesmas trajetorias, arquitetura GRU, janela de BPTT, ruido e regras
-de associacao. O val 09 escolhe a melhor epoca por perda em previsao livre; as sequencias 02/10
-so entram na avaliacao final. Sao tres seeds por configuracao e clipping ligado/desligado.
+"""Parte 3, eixo 2: teacher forcing, scheduled sampling e previsao livre, com e sem clipping, em
+3 seeds. A epoca sai da perda em previsao livre na 09; 02 e 10 so entram na avaliacao final.
 
   python ablacao_regime.py
   python ablacao_regime.py --epocas 3 --seeds 0 --force  # verificacao rapida
@@ -23,7 +20,7 @@ from model import PreditorRNN, salva, treina, trajetorias
 from tracker import roda_seq
 
 
-PARAMS = dict(iou_min=0.3, k=60, score_min=0.7)  # fixados antes da ablação, no resultado da Parte 2
+PARAMS = dict(iou_min=0.3, k=60, score_min=0.7)  # os da Parte 2
 REGIMES = ("teacher", "scheduled", "free")
 CLIPS = (1.0, 0.0)
 PASTA_CKPT = os.path.join(mot.AQUI, "checkpoints", "ablacao_regime")

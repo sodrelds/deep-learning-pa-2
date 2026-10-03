@@ -1,30 +1,11 @@
-"""Parte 2, trilha A: RNN como modelo de movimento.
+"""Parte 2, trilha A: GRU como modelo de movimento, um estado por track.
 
-Um estado recorrente por track. Cada track tem a caixa que o modelo previu pra ela no quadro atual.
-Quando a track casa com uma deteccao, a celula recebe essa observacao escrita no referencial da
-propria previsao, ou seja, quanto a pessoa apareceu fora de onde o modelo esperava. Quando nao
-casa com nada (oclusao, deteccao perdida), a entrada e zero e o estado roda sozinho. A saida e o
-deslocamento da previsao do quadro seguinte em relacao a previsao atual. Quem guarda de onde a
-pessoa vinha e o estado da recorrencia, porque a entrada so diz o quanto a previsao errou.
+Entrada: a deteccao casada escrita relativa a caixa prevista (zero sem observacao). Saida: o
+deslocamento da proxima previsao no formato ancora dos slides (dx, dy, dw, dh), vezes ESCALA.
+Com caixa absoluta a mudanca por quadro e ~0.001 e o modelo nao aprendia movimento.
 
-O deslocamento e parametrizado do jeito que os slides de deteccao escrevem a caixa em relacao a
-ancora (aqui a ancora e a caixa prevista): dx = (cx' - cx)/w, dy = (cy' - cy)/h, dw = log(w'/w),
-dh = log(h'/h), vezes ESCALA pra ficar perto de 1.
-
-A observacao entra relativa a previsao por causa da escala. Com a caixa absoluta normalizada pelo
-tamanho da imagem, a mudanca entre dois quadros e de uns 0.001, e o GRU precisaria de pesos enormes
-pra tirar velocidade disso. A gente testou assim e ele quase nao aprendeu movimento em 60 epocas.
-Relativa a previsao, a entrada fica na ordem de 1.
-
-Perda smooth-L1 entre o deslocamento previsto e o deslocamento ate a caixa verdadeira do quadro
-seguinte, nas trajetorias do gt das sequencias de treino. As observacoes levam um ruido com o
-desvio medido das deteccoes SDP contra o gt (RUIDO), porque no rastreamento a entrada e uma
-deteccao, que nunca cai exatamente em cima do gt. O alvo e o gt limpo, entao o modelo tambem aprende
-a nao seguir o ruido.
-
-BPTT truncado como nos slides: a janela tem L quadros e o estado atravessa a janela inteira
-(k1 = L), mas o gradiente so volta T passos (k2 = T), com detach a cada T. A caixa prevista entra
-sem gradiente. Um passo do otimizador por lote, pra todo T ter o mesmo numero de atualizacoes.
+Treino: smooth-L1 contra o gt limpo com observacoes ruidosas (RUIDO), BPTT truncado (janela L,
+detach a cada T) e um passo do otimizador por lote.
 """
 import numpy as np
 import torch
@@ -35,8 +16,7 @@ import mot
 from metrics import iou
 
 ESCALA = 10.0
-# desvio robusto (mediana do erro absoluto / 0.6745) das deteccoes SDP casadas com o gt nas
-# sequencias de treino e val, em dx, dy, dw, dh
+# desvio robusto das deteccoes SDP contra o gt (treino e val), em dx, dy, dw, dh
 RUIDO = np.array([0.06, 0.02, 0.08, 0.04])
 
 
@@ -49,8 +29,7 @@ class Movimento(nn.Module):
         self.dim_estado = 2 * oculto if celula == "lstm" else oculto
 
     def forward(self, z, s=None):
-        """Um passo. z (B, 4) e a observacao relativa a previsao (zero se nao teve observacao);
-        s e o estado (no LSTM, h e c concatenados). Devolve o deslocamento da proxima previsao."""
+        """Um passo. z e a observacao relativa a previsao; no LSTM, s junta h e c."""
         if self.celula == "lstm":
             h, c = self.rec(z, None if s is None else s.chunk(2, 1))
             s = torch.cat([h, c], 1)
@@ -81,8 +60,7 @@ def poe_ruido(c, gen):
 
 
 def trajetorias(seqs):
-    """Caixas xywh de cada pedestre do gt. O gt do MOT17 nao tem buraco dentro de um id, a pessoa
-    continua anotada quando fica escondida."""
+    """Caixas xywh de cada pedestre do gt (o MOT17 anota a pessoa mesmo escondida)."""
     out = []
     for s in seqs:
         ped = mot.gt(s)[0]
@@ -93,8 +71,7 @@ def trajetorias(seqs):
 
 
 def janelas(trajs, L, rng):
-    """Corta janelas de L+1 caixas, com inicio sorteado e mais ou menos uma janela a cada L/4
-    quadros de trajetoria. Trajetoria curta vira uma janela so, com o fim mascarado."""
+    """Janelas de L+1 caixas com inicio sorteado. Trajetoria curta vira uma janela com o fim mascarado."""
     X, M = [], []
     for c in trajs:
         n = len(c)
@@ -109,13 +86,8 @@ def janelas(trajs, L, rng):
 
 
 def perda_janelas(modelo, X, M, T, gen, treino=True, regime="teacher", prob_livre=0.0, visto=10):
-    """BPTT truncado. Apos `visto` passos, escolhe observacao ou previsao livre.
-
-    teacher: recebe observacao ruidosa em todos os passos; scheduled: a observacao de cada
-    passo e omitida com probabilidade crescente; free: so recebe as primeiras `visto`
-    observacoes. Na omissao, z=0 e a caixa prevista segue a saida anterior da rede.
-    A caixa prevista sempre e realimentada, como na inferencia.
-    """
+    """BPTT truncado em T. Depois de `visto` passos, teacher sempre ve a observacao, free nunca ve e
+    scheduled omite com probabilidade prob_livre. Sem observacao, z = 0."""
     if regime not in ("teacher", "scheduled", "free"):
         raise ValueError(f"regime desconhecido: {regime}")
     obs = poe_ruido(X, gen)
@@ -195,8 +167,7 @@ def carrega(caminho):
 
 
 class PreditorRNN:
-    """Liga o modelo no tracker.rastreia. O estado de cada track guarda o estado da recorrencia e a
-    caixa prevista pro quadro atual."""
+    """Liga o modelo no tracker.rastreia. Cada track guarda o estado e a caixa prevista."""
 
     def __init__(self, modelo):
         self.m = modelo.eval()
@@ -222,9 +193,7 @@ class PreditorRNN:
 
 
 def previsao_livre(preditor, jan, visto=10, seed=0):
-    """jan (n, visto + H, 4): pedacos de trajetoria do gt. A track ve os primeiros `visto` quadros
-    com o ruido das deteccoes e depois anda sozinha. Devolve (n, H) com o IoU entre a caixa prevista
-    e a verdadeira; h = 1 e a previsao normal do quadro seguinte a ultima observacao."""
+    """IoU (n, H) entre previsao e gt quando a track ve `visto` quadros com ruido e depois anda sozinha."""
     obs = poe_ruido(torch.tensor(jan[:, :visto], dtype=torch.float32), torch.Generator().manual_seed(seed)).numpy()
     est = [preditor.novo() for _ in jan]
     for t in range(visto):
@@ -238,16 +207,14 @@ def previsao_livre(preditor, jan, visto=10, seed=0):
 
 
 if __name__ == "__main__":
-    # confere as contas da parametrizacao e que o modelo aprende a andar: treina rapido nas
-    # trajetorias das elipses sinteticas e, vendo 10 quadros com ruido e depois andando sozinho
-    # por 10, tem que acompanhar a elipse melhor que repetir a ultima caixa
+    # treinado nas elipses, o modelo tem que prever melhor que repetir a ultima caixa
     from synth import gera
     from tracker import Ingenuo
     c = torch.tensor([[10.0, 20.0, 30.0, 60.0]])
     c2 = torch.tensor([[13.0, 18.0, 33.0, 57.0]])
     assert torch.allclose(desloca(c, deslocamento(c, c2)), c2, atol=1e-4)
 
-    # Nos extremos do schedule, as mascaras devem reproduzir teacher e free.
+    # scheduled com prob 0 e 1 tem que dar teacher e free
     x = torch.stack([torch.stack([c[0] + torch.tensor([float(t), 0, 0, 0])
                                   for t in range(9)]) for _ in range(2)])
     mascara = torch.ones(2, 8)
